@@ -1,0 +1,69 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────
+// 진로진학 합격노트 · Cloud Firestore 보안 규칙
+//
+// 로그인: 구글 계정 (아래 두 이메일만 허용)
+// 두 계정은 같은 공간(spaces/hapgyeok)을 함께 써서
+// 어느 계정으로 로그인해도 같은 자료가 보여요.
+//
+// 원본 파일(PDF·이미지 등)은 Storage 없이 각 컴퓨터의 브라우저에 보관하고,
+// 글자로 된 내용(텍스트·정제본·맵·학습지·기록)만 여기에 저장해요.
+//
+// 데이터 구조
+//   spaces/hapgyeok                      설정(시험일, 시간, 개수, 루브릭 등)
+//   spaces/hapgyeok/sections/{id}        자료실 섹션
+//   spaces/hapgyeok/materials/{id}       자료(텍스트·정제본·맵·학습지·복습 일정)
+//   spaces/hapgyeok/notes/{id}           빈 노트
+//   spaces/hapgyeok/board/{id}           알림판 메모
+//   spaces/hapgyeok/questions/{id}       면접 문항(인성·즉답형·구상형)
+//   spaces/hapgyeok/sessions/{id}        모의면접 결과(영상·음성 제외)
+//   spaces/hapgyeok/quant/{doc}          정량평가 산출표
+//   spaces/hapgyeok/quantSnapshots/{y}   연도별 정량 점수
+//   spaces/hapgyeok/studyLog/{date}      학습한 날짜
+// ─────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 허용할 구글 계정 (추가·변경은 이 목록만 고치면 돼요)
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+             'pol0827@goedu.kr',
+             'pol082753@gmail.com'
+           ];
+    }
+
+    // 문서 하나의 크기 제한(Firestore 최대 1MB)보다 조금 작게 막아 둬요
+    function smallEnough() {
+      return request.resource == null
+        || request.resource.data.size() < 1000;   // 필드 개수 상한
+    }
+
+    // 합격노트 공간: 두 계정만 읽고 쓸 수 있어요
+    match /spaces/hapgyeok {
+      allow read, write: if isOwner();
+
+      match /{collection}/{docId} {
+        allow read: if isOwner();
+        allow create, update: if isOwner() && smallEnough()
+          && collection in [
+               'sections', 'materials', 'notes', 'board', 'questions',
+               'sessions', 'quant', 'quantSnapshots', 'studyLog'
+             ];
+        allow delete: if isOwner();
+      }
+
+      // 자료 텍스트가 길 때 나눠 담는 하위 문서 (materials/{id}/chunks/{n})
+      match /materials/{materialId}/chunks/{chunkId} {
+        allow read, write: if isOwner();
+      }
+    }
+
+    // 그 밖의 모든 경로는 누구도 읽거나 쓸 수 없어요
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
