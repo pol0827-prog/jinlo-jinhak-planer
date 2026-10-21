@@ -3828,7 +3828,7 @@ function vTrash(m){
 
 /* ================================================================
    클라우드: 구글 로그인 + Firestore 동기화
-   - 두 계정(pol0827@goedu.kr, pol082753@gmail.com)이 같은 공간을 함께 써요.
+   - 허용된 계정(Firestore 규칙에 적힌 계정)이 같은 공간을 함께 써요.
    - 원본 파일은 각 컴퓨터의 브라우저에만, 글자로 된 내용은 Firestore에 저장해요.
 ================================================================ */
 const FIREBASE_CONFIG = {
@@ -3839,7 +3839,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "293376698270",
   appId: "1:293376698270:web:5efdfb87a5e644c956988f"
 };
-const ALLOWED_EMAILS = ["pol0827@goedu.kr", "pol082753@gmail.com"];
+// 허용 계정은 화면·소스에 적지 않고 Firestore 보안 규칙에서만 확인해요.
 const SPACE = "spaces/hapgyeok";
 const COLS = ["sections","materials","notes","board","questions","sessions","quantSnapshots","quant","studyLog"];
 const cloud = { ready:false, user:null, db:null, auth:null, last:{}, timer:null, pushing:false, dirty:false, status:"", mode:"init" };
@@ -3868,7 +3868,6 @@ function showLogin(msg){
     <p class="muted" style="margin:6px 0 20px">합격하는 날까지, 모든 자료를 한 곳에.</p>
     <button class="gbtn" id="gLogin"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg> 구글 계정으로 로그인</button>
     ${msg?`<p class="note warn" style="margin:14px 0 0;text-align:left">${msg}</p>`:""}
-    <p class="small muted" style="margin:16px 0 0">로그인할 수 있는 계정: ${ALLOWED_EMAILS.map(esc).join(", ")}<br>두 계정 모두 같은 자료가 보여요.</p>
     <button class="lk" id="gLocal" style="margin-top:14px;font-size:13px">로그인 없이 이 컴퓨터에서만 쓰기</button>
   </div>`;
   $("#gLogin").onclick=login;
@@ -4023,9 +4022,18 @@ async function initCloud(){
   FB.onAuthStateChanged(cloud.auth, async user=>{
     if(!user){ cloud.user=null; cloud.mode = local ? "local" : "login"; renderAcct(); if(!local) showLogin(); return; }
     const email = (user.email||"").toLowerCase();
-    if(!ALLOWED_EMAILS.includes(email)){ await FB.signOut(cloud.auth); showLogin(`<b>${esc(email)}</b> 계정은 이 노트에 들어올 수 없어요. 허용된 계정으로 로그인해 주세요.`); return; }
     cloud.user = user; cloud.mode="cloud"; hideLogin(); renderAcct();
-    try{ await pullCloud(); }catch(e){ console.error(e); setSync("⚠ 불러오기 실패","err"); toast(e.code==="permission-denied" ? "클라우드 자료를 읽을 권한이 없어요. Firestore 규칙을 게시했는지 확인해 주세요." : "클라우드 자료를 불러오지 못했어요: "+(e.message||e.code), 6000); }
+    try{ await pullCloud(); }
+    catch(e){
+      console.error(e);
+      if(e.code==="permission-denied"){
+        // 규칙에서 막힌 계정이면 바로 로그아웃해요
+        cloud.user=null; await FB.signOut(cloud.auth).catch(()=>{});
+        showLogin(`<b>${esc(email)}</b> 계정으로는 이 노트에 들어올 수 없어요. 다른 구글 계정으로 로그인해 주세요.`);
+        return;
+      }
+      setSync("⚠ 불러오기 실패","err"); toast("클라우드 자료를 불러오지 못했어요: "+(e.message||e.code), 6000);
+    }
     render(); renderAcct();
   });
   // 다른 기기에서 바꾼 내용: 이 창으로 돌아오면 새로 불러와요

@@ -1,0 +1,7 @@
+{
+  "routes": [
+    { "src": "/(firestore\\.rules|firestore\\.indexes\\.json|firebase\\.json|README\\.md|\\.gitignore|\\.vercelignore|vercel\\.json)", "status": 404 },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}

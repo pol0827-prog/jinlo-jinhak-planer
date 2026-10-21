@@ -1,0 +1,6 @@
+# 배포(공개 웹)에서 빼는 파일: 앱 화면은 index.html 하나면 돼요
+firestore.rules
+firestore.indexes.json
+firebase.json
+README.md
+.gitignore
